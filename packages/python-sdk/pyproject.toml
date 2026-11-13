@@ -1,0 +1,17 @@
+[project]
+name = "agentreplay-sdk"
+version = "0.1.0"
+description = "Record and deterministically replay Python agent executions"
+requires-python = ">=3.11"
+license = "MIT"
+dependencies = ["pydantic>=2.10,<3", "httpx>=0.28,<1"]
+
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+agentreplay = ["py.typed"]
