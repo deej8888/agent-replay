@@ -1,5 +1,7 @@
 # AgentReplay
 
+[![CI](https://github.com/deej8888/agent-replay/actions/workflows/ci.yaml/badge.svg)](https://github.com/deej8888/agent-replay/actions/workflows/ci.yaml)
+
 **Understand every step your agent took. Reproduce the one that went wrong.**
 
 AgentReplay is a local-first debugger for Python agents. Record prompts, model responses, tool calls, and failures; inspect the execution tree; then re-run instrumented code using recorded responses, without calling real integrations.
