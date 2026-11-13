@@ -1,5 +1,13 @@
 import type { Span } from "./types";
 
+export function timestampMs(value: string): number {
+  const fraction = value.match(/\.(\d+)(?:Z|[+-]\d{2}:\d{2})$/)?.[1] || "";
+  const milliseconds = Number(fraction.slice(0, 3).padEnd(3, "0"));
+  return (
+    Date.parse(value) + Number(`0.${fraction || "0"}`) * 1000 - milliseconds
+  );
+}
+
 export function duration(ms: number): string {
   return ms >= 1000
     ? `${(ms / 1000).toFixed(2)} s`
@@ -31,7 +39,7 @@ export function exclusiveLatency(spans: Span[]): Record<string, number> {
   for (const span of spans) {
     const intervals = spans
       .filter((s) => s.parent_id === span.id)
-      .map((s) => [Date.parse(s.started_at), Date.parse(s.ended_at)])
+      .map((s) => [timestampMs(s.started_at), timestampMs(s.ended_at)])
       .sort((a, b) => a[0] - b[0]);
     let covered = 0,
       end = -Infinity;
@@ -40,7 +48,7 @@ export function exclusiveLatency(spans: Span[]): Record<string, number> {
       end = Math.max(end, stop);
     }
     // Use proportional wall-clock coverage to retain submillisecond precision.
-    const wall = Date.parse(span.ended_at) - Date.parse(span.started_at);
+    const wall = timestampMs(span.ended_at) - timestampMs(span.started_at);
     const own =
       wall > 0
         ? span.duration_ms * Math.max(0, 1 - covered / wall)

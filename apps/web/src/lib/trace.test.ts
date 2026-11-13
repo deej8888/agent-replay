@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { duration, exclusiveLatency, orderedSpans } from "./trace";
+import { duration, exclusiveLatency, orderedSpans, timestampMs } from "./trace";
 import type { Span } from "./types";
 
 const span = (
@@ -27,6 +27,12 @@ const span = (
 });
 
 describe("trace rendering", () => {
+  it("retains submillisecond positions for fast deterministic tools", () => {
+    expect(
+      timestampMs("2026-01-01T00:00:00.000600Z") -
+        timestampMs("2026-01-01T00:00:00.000100Z"),
+    ).toBeCloseTo(0.5, 2);
+  });
   it("places children under their parents instead of completion order", () => {
     const spans = [
       span("child", "root", 1, 10, 40),

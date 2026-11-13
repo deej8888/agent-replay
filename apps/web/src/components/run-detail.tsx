@@ -16,7 +16,12 @@ import {
   Braces,
 } from "lucide-react";
 import type { Run, Span } from "@/lib/types";
-import { duration, orderedSpans, exclusiveLatency } from "@/lib/trace";
+import {
+  duration,
+  orderedSpans,
+  timestampMs,
+  exclusiveLatency,
+} from "@/lib/trace";
 import { JsonInspector } from "./json-inspector";
 import { Status, Timestamp } from "./ui";
 export function RunDetail({
@@ -157,7 +162,7 @@ export function RunDetail({
             {orderedSpans(run.spans).map(({ span, depth }) => {
               const left = Math.max(
                 0,
-                ((Date.parse(span.started_at) - Date.parse(run.started_at)) /
+                ((timestampMs(span.started_at) - timestampMs(run.started_at)) /
                   Math.max(run.duration_ms, 0.001)) *
                   100,
               );

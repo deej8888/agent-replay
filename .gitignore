@@ -15,5 +15,9 @@ coverage/
 playwright-report/
 test-results/
 dist/
+build/
 *.tsbuildinfo
 .artifacts/
+demo-run.json
+success.json
+failure.json
