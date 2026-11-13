@@ -1,0 +1,28 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    environment:
+      AGENTREPLAY_DATABASE_URL: ${AGENTREPLAY_DATABASE_URL:-sqlite:////data/agentreplay.db}
+      AGENTREPLAY_API_KEY: ${AGENTREPLAY_API_KEY:-}
+    ports: ["127.0.0.1:8000:8000"]
+    volumes: ["traces:/data"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    environment:
+      AGENTREPLAY_BACKEND_URL: http://api:8000
+      AGENTREPLAY_API_KEY: ${AGENTREPLAY_API_KEY:-}
+    ports: ["127.0.0.1:3000:3000"]
+    depends_on:
+      api:
+        condition: service_healthy
+volumes:
+  traces:

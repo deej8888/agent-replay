@@ -1,0 +1,21 @@
+# docker compose -f compose.yaml -f compose.postgres.yaml up --build
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: agentreplay
+      POSTGRES_DB: agentreplay
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in your environment}
+    volumes: ["postgres-data:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U agentreplay"]
+      interval: 5s
+      retries: 10
+  api:
+    environment:
+      AGENTREPLAY_DATABASE_URL: postgresql+psycopg://agentreplay:${POSTGRES_PASSWORD}@postgres:5432/agentreplay
+    depends_on:
+      postgres:
+        condition: service_healthy
+volumes:
+  postgres-data:
