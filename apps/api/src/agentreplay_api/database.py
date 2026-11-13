@@ -1,7 +1,17 @@
 import os
 from typing import Any
 
-from sqlalchemy import JSON, DateTime, Float, ForeignKey, Index, Integer, String, create_engine, event
+from sqlalchemy import (
+    JSON,
+    DateTime,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    create_engine,
+    event,
+)
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
 from sqlalchemy.pool import StaticPool
@@ -37,7 +47,7 @@ class SpanRow(Base):
 
 
 def make_engine(url: str | None = None) -> Engine:
-    url = url or os.getenv("AGENTREPLAY_DATABASE_URL", "sqlite:///./agentreplay.db")
+    url = url or os.getenv("AGENTREPLAY_DATABASE_URL") or "sqlite:///./agentreplay.db"
     options: dict[str, Any] = {}
     if url.startswith("sqlite"):
         options["connect_args"] = {"check_same_thread": False}
@@ -45,10 +55,12 @@ def make_engine(url: str | None = None) -> Engine:
             options["poolclass"] = StaticPool
     engine = create_engine(url, **options)
     if url.startswith("sqlite"):
+
         @event.listens_for(engine, "connect")
         def configure_sqlite(connection: Any, _: Any) -> None:
             connection.execute("PRAGMA foreign_keys=ON")
             connection.execute("PRAGMA busy_timeout=5000")
+
     return engine
 
 

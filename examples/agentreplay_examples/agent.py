@@ -5,7 +5,10 @@ from agentreplay import trace_agent, trace_llm, trace_tool
 
 @trace_tool
 def search_catalog(request: str) -> list[dict[str, Any]]:
-    return [{"sku": "kb-01", "name": "Mechanical keyboard", "price": 89}, {"sku": "kb-02", "name": "Compact keyboard", "price": 59}]
+    return [
+        {"sku": "kb-01", "name": "Mechanical keyboard", "price": 89},
+        {"sku": "kb-02", "name": "Compact keyboard", "price": 59},
+    ]
 
 
 @trace_tool
@@ -21,7 +24,10 @@ def compose_answer(request: str, products: list[dict[str, Any]], inventory: dict
     return f"I recommend the {product['name']} for ${product['price']}. There are {inventory['quantity']} available."
 
 
-@trace_agent(name="shopping-assistant", metadata={"model": "deterministic-fake-v1", "replay_target": "shopping-demo", "version": "1.0"})
+@trace_agent(
+    name="shopping-assistant",
+    metadata={"model": "deterministic-fake-v1", "replay_target": "shopping-demo", "version": "1.0"},
+)
 def shopping_agent(request: str, simulate_failure: bool = False) -> str:
     products = search_catalog(request)
     inventory = check_inventory(products[0]["sku"], simulate_failure)

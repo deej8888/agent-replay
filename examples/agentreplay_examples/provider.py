@@ -1,4 +1,5 @@
 """Optional real adapter. The demo never imports or invokes this module."""
+
 import os
 
 import httpx
@@ -9,7 +10,12 @@ from agentreplay import trace_llm
 def provider_completion(prompt: str) -> str:
     key = os.environ["OPENAI_API_KEY"]
     model = os.environ["OPENAI_MODEL"]
-    response = httpx.post("https://api.openai.com/v1/responses", headers={"Authorization": f"Bearer {key}"}, json={"model": model, "input": prompt}, timeout=30)
+    response = httpx.post(
+        "https://api.openai.com/v1/responses",
+        headers={"Authorization": f"Bearer {key}"},
+        json={"model": model, "input": prompt},
+        timeout=30,
+    )
     response.raise_for_status()
     for item in response.json()["output"]:
         if item.get("type") == "message":

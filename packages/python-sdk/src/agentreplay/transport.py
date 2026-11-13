@@ -26,9 +26,11 @@ class MemoryTransport:
 class BufferedHTTPTransport:
     """Bounded best-effort queue. Explicitly close() before process exit to flush."""
 
-    def __init__(self, url: str | None = None, api_key: str | None = None, capacity: int = 128) -> None:
-        self.url = (url or os.getenv("AGENTREPLAY_API_URL", "http://127.0.0.1:8000")).rstrip("/")
-        self.api_key = api_key or os.getenv("AGENTREPLAY_API_KEY", "")
+    def __init__(
+        self, url: str | None = None, api_key: str | None = None, capacity: int = 128
+    ) -> None:
+        self.url = (url or os.getenv("AGENTREPLAY_API_URL") or "http://127.0.0.1:8000").rstrip("/")
+        self.api_key = api_key or os.getenv("AGENTREPLAY_API_KEY") or ""
         self.queue: queue.Queue[Run | None] = queue.Queue(maxsize=capacity)
         self.dropped = 0
         self.failed = 0
@@ -55,7 +57,11 @@ class BufferedHTTPTransport:
                 try:
                     if run is None:
                         return
-                    response = client.post(f"{self.url}/v1/runs", json=run.model_dump(mode="json"), headers={"X-API-Key": self.api_key})
+                    response = client.post(
+                        f"{self.url}/v1/runs",
+                        json=run.model_dump(mode="json"),
+                        headers={"X-API-Key": self.api_key},
+                    )
                     response.raise_for_status()
                 except Exception:
                     self.failed += 1

@@ -1,4 +1,5 @@
 """Strict ordered mocks for instrumented boundaries; this is not a Python sandbox."""
+
 import builtins
 from contextvars import ContextVar, Token
 from typing import Any
@@ -22,7 +23,9 @@ active_replay: ContextVar["ReplaySession | None"] = ContextVar("agentreplay_repl
 class ReplaySession:
     def __init__(self, source: Run) -> None:
         if any(not s.replayable for s in source.spans):
-            raise ReplayDivergence("Trace contains truncated or unsupported values and cannot be replayed")
+            raise ReplayDivergence(
+                "Trace contains truncated or unsupported values and cannot be replayed"
+            )
         if source.metadata.get("concurrent"):
             raise ReplayDivergence("Concurrent boundary calls cannot be replayed deterministically")
         self.source = source
@@ -36,7 +39,11 @@ class ReplaySession:
                 parent = by_id.get(parent.parent_id) if parent.parent_id else None
             return False
 
-        self.calls = [s for s in sorted(source.spans, key=lambda s: s.sequence) if s.kind in ("tool", "llm") and not inside_boundary(s)]
+        self.calls = [
+            s
+            for s in sorted(source.spans, key=lambda s: s.sequence)
+            if s.kind in ("tool", "llm") and not inside_boundary(s)
+        ]
         self.cursor = 0
         self.divergences: list[JsonValue] = []
         self.token: Token[ReplaySession | None] | None = None
@@ -50,10 +57,19 @@ class ReplaySession:
             self.fail(f"Unexpected {kind} call: {name}; recording exhausted")
         expected = self.calls[self.cursor]
         if expected.name != name or expected.kind != kind or expected.input != inputs:
-            self.fail(f"Call {self.cursor}: expected {expected.kind} {expected.name} with matching sanitized input; received {kind} {name}")
+            self.fail(
+                f"Call {self.cursor}: expected {expected.kind} {expected.name} with matching sanitized input; received {kind} {name}"
+            )
         self.cursor += 1
         if expected.error:
-            safe_errors = {"ValueError", "RuntimeError", "KeyError", "TypeError", "LookupError", "TimeoutError"}
+            safe_errors = {
+                "ValueError",
+                "RuntimeError",
+                "KeyError",
+                "TypeError",
+                "LookupError",
+                "TimeoutError",
+            }
             if expected.error.type in safe_errors:
                 error_type = getattr(builtins, expected.error.type)
                 raise error_type(expected.error.message)
@@ -62,7 +78,24 @@ class ReplaySession:
 
     @property
     def report(self) -> dict[str, JsonValue]:
-        return {"offline": True, "matched_calls": self.cursor, "total_calls": len(self.calls), "missing_calls": [s.name for s in self.calls[self.cursor:]], "divergences": self.divergences, "faithful": not self.divergences and self.cursor == len(self.calls)}
+        return {
+            "offline": True,
+            "matched_calls": self.cursor,
+            "total_calls": len(self.calls),
+            "missing_calls": [s.name for s in self.calls[self.cursor :]],
+            "divergences": self.divergences,
+            "faithful": not self.divergences and self.cursor == len(self.calls),
+        }
+
+    def observe_result(self, run: Run) -> None:
+        if (
+            run.output != self.source.output
+            or run.status != self.source.status
+            or run.error != self.source.error
+        ):
+            self.divergences.append(
+                {"message": "Final output, status, or exception differs from the recording"}
+            )
 
     def __enter__(self) -> "ReplaySession":
         if active_replay.get() is not None:

@@ -1,5 +1,5 @@
-from alembic import context
 from agentreplay_api.database import Base, make_engine
+from alembic import context
 
 config = context.config
 connection = config.attributes.get("connection")
@@ -13,7 +13,12 @@ def migrate(connection):
 
 if context.is_offline_mode():
     import os
-    context.configure(url=os.getenv("AGENTREPLAY_DATABASE_URL", "sqlite:///./agentreplay.db"), target_metadata=Base.metadata, literal_binds=True)
+
+    context.configure(
+        url=os.getenv("AGENTREPLAY_DATABASE_URL", "sqlite:///./agentreplay.db"),
+        target_metadata=Base.metadata,
+        literal_binds=True,
+    )
     with context.begin_transaction():
         context.run_migrations()
 elif connection is not None:

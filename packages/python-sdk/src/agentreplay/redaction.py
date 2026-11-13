@@ -1,18 +1,26 @@
 """Bounded, conservative JSON capture. Never call an unknown object's repr()."""
+
 import hashlib
 import json
 import math
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from itertools import islice
 from typing import Any
 
 from pydantic import JsonValue
 
-SENSITIVE = re.compile(r"password|passwd|secret|token|authorization|api.?key|cookie|credential|ssn|email|phone|address", re.I)
+SENSITIVE = re.compile(
+    r"password|passwd|secret|token|authorization|api.?key|cookie|credential|ssn|email|phone|address",
+    re.I,
+)
 EMAIL = re.compile(r"[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}")
 BEARER = re.compile(r"(?i)\b(bearer\s+|sk-)[A-Za-z0-9._-]+")
 PHONE = re.compile(r"(?<!\w)(?:\+?\d[\d ()-]{8,}\d)(?!\w)")
+ASSIGNMENT = re.compile(
+    r"(?i)\b(password|passwd|secret|token|api[_-]?key|authorization)\s*[:=]\s*[^\s,;]+"
+)
 
 
 @dataclass
@@ -23,7 +31,10 @@ class Redactor:
     max_items: int = 100
 
     def text(self, value: str) -> str:
-        return PHONE.sub("[REDACTED]", BEARER.sub("[REDACTED]", EMAIL.sub("[REDACTED]", value)))
+        return ASSIGNMENT.sub(
+            r"\1=[REDACTED]",
+            PHONE.sub("[REDACTED]", BEARER.sub("[REDACTED]", EMAIL.sub("[REDACTED]", value))),
+        )
 
     def capture(self, value: Any) -> tuple[JsonValue, bool]:
         complete = True
@@ -53,9 +64,11 @@ class Redactor:
                     complete = False
                 if isinstance(item, Mapping):
                     result: JsonValue = {
-                        str(k)[:200]: "[REDACTED]" if SENSITIVE.search(str(k)) or str(k).lower() in {x.lower() for x in self.sensitive_fields}
+                        self.text(str(k))[:200]: "[REDACTED]"
+                        if SENSITIVE.search(str(k))
+                        or str(k).lower() in {x.lower() for x in self.sensitive_fields}
                         else visit(v, depth + 1)
-                        for k, v in list(item.items())[: self.max_items]
+                        for k, v in islice(item.items(), self.max_items)
                     }
                 else:
                     result = [visit(v, depth + 1) for v in item[: self.max_items]]
@@ -64,8 +77,11 @@ class Redactor:
             complete = False
             return f"[UNSUPPORTED:{type(item).__name__}]"
 
-        captured = visit(value)
-        encoded = json.dumps(captured, ensure_ascii=True).encode()
+        try:
+            captured = visit(value)
+            encoded = json.dumps(captured, ensure_ascii=True).encode()
+        except Exception:
+            return "[CAPTURE FAILED]", False
         if len(encoded) > self.max_bytes:
             # Hash the sanitized representation, never retain a raw-value fingerprint.
             return {"_truncated": True, "sha256": hashlib.sha256(encoded).hexdigest()}, False
