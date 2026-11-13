@@ -74,6 +74,7 @@ class Run(BaseModel):
             raise ValueError("exactly one root agent span is required")
         if sorted(s.sequence for s in self.spans) != list(range(len(self.spans))):
             raise ValueError("span sequences must be unique and contiguous")
+        self.spans.sort(key=lambda s: s.sequence)
         for span in self.spans:
             if span.started_at < self.started_at or span.ended_at > self.ended_at:
                 raise ValueError("span timestamps must be within the run")

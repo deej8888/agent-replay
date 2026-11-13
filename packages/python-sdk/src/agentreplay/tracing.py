@@ -15,7 +15,7 @@ from pydantic import JsonValue
 from .models import ErrorInfo, Kind, Run, Span
 from .redaction import Redactor
 from .replay import active_replay
-from .transport import MemoryTransport, Transport
+from .transport import MemoryTransport, NullTransport, Transport
 
 P = ParamSpec("P")
 R = TypeVar("R")
@@ -61,6 +61,7 @@ class Tracer:
         kind: Kind = "span",
         inputs: Any = None,
         metadata: dict[str, JsonValue] | None = None,
+        _mockable: bool = False,
     ) -> Iterator[dict[str, Any]]:
         recorder = recorder_context.get()
         is_root = recorder is None
@@ -86,7 +87,11 @@ class Tracer:
         try:
             yield state
         except BaseException as exc:
-            error = ErrorInfo(type=type(exc).__name__, message=self.redactor.text(str(exc))[:4096])
+            try:
+                message = self.redactor.text(str(exc))[:4096]
+            except Exception:
+                message = "[Exception message could not be captured]"
+            error = ErrorInfo(type=type(exc).__name__, message=message)
             raise
         finally:
             ended = datetime.now(UTC)
@@ -105,7 +110,9 @@ class Tracer:
                 output=output,
                 error=error,
                 metadata=captured_metadata if isinstance(captured_metadata, dict) else {},
-                replayable=input_complete and output_complete,
+                replayable=input_complete
+                and output_complete
+                and (kind not in ("tool", "llm") or _mockable),
             )
             if sequence < 2000:
                 recorder.spans.append(span)
@@ -132,14 +139,17 @@ class Tracer:
                         replay = active_replay.get()
                         if replay:
                             replay.observe_result(run)
-                        self.transport.submit(run)
+                        if len(run.model_dump_json().encode()) > 2_097_152:
+                            log.warning("AgentReplay trace exceeds 2 MiB; trace dropped")
+                        else:
+                            self.transport.submit(run)
                     except Exception:
                         log.warning("AgentReplay capture/export failed (no payload logged)")
                 else:
                     log.warning("AgentReplay span limit exceeded; trace dropped")
 
 
-default_tracer = Tracer()
+default_tracer = Tracer(NullTransport())
 
 
 def _decorate(
@@ -173,7 +183,9 @@ def _decorate(
                 recorder.active_boundaries += 1
                 boundary_token = boundary_context.set((*boundary_context.get(), uuid4()))
             try:
-                with tracer.span(span_name, kind=kind, inputs=inputs, metadata=metadata) as state:
+                with tracer.span(
+                    span_name, kind=kind, inputs=inputs, metadata=metadata, _mockable=boundary
+                ) as state:
                     yield state, True
             finally:
                 if recorder and boundary:

@@ -15,6 +15,11 @@ class Transport(Protocol):
     def submit(self, run: Run) -> None: ...
 
 
+class NullTransport:
+    def submit(self, run: Run) -> None:
+        pass
+
+
 class MemoryTransport:
     def __init__(self) -> None:
         self.runs: list[Run] = []

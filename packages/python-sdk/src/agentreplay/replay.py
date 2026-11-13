@@ -1,6 +1,8 @@
 """Strict ordered mocks for instrumented boundaries; this is not a Python sandbox."""
 
 import builtins
+import json
+import sys
 from contextvars import ContextVar, Token
 from typing import Any
 
@@ -17,7 +19,29 @@ class RecordedCallError(RuntimeError):
     pass
 
 
+def same_json(left: JsonValue, right: JsonValue) -> bool:
+    """Preserve primitive types: Python considers True == 1, JSON does not."""
+    return json.dumps(left, sort_keys=True, ensure_ascii=True) == json.dumps(
+        right, sort_keys=True, ensure_ascii=True
+    )
+
+
 active_replay: ContextVar["ReplaySession | None"] = ContextVar("agentreplay_replay", default=None)
+_guard_installed = False
+
+
+def _network_guard(event: str, args: tuple[Any, ...]) -> None:
+    session = active_replay.get()
+    if session and event in {
+        "socket.connect",
+        "socket.connect_ex",
+        "socket.getaddrinfo",
+        "socket.sendto",
+        "socket.sendmsg",
+    }:
+        session.fail(
+            "Network access is forbidden during offline replay; instrument this integration as a tool or LLM boundary"
+        )
 
 
 class ReplaySession:
@@ -56,7 +80,7 @@ class ReplaySession:
         if self.cursor >= len(self.calls):
             self.fail(f"Unexpected {kind} call: {name}; recording exhausted")
         expected = self.calls[self.cursor]
-        if expected.name != name or expected.kind != kind or expected.input != inputs:
+        if expected.name != name or expected.kind != kind or not same_json(expected.input, inputs):
             self.fail(
                 f"Call {self.cursor}: expected {expected.kind} {expected.name} with matching sanitized input; received {kind} {name}"
             )
@@ -89,7 +113,7 @@ class ReplaySession:
 
     def observe_result(self, run: Run) -> None:
         if (
-            run.output != self.source.output
+            not same_json(run.output, self.source.output)
             or run.status != self.source.status
             or run.error != self.source.error
         ):
@@ -98,8 +122,12 @@ class ReplaySession:
             )
 
     def __enter__(self) -> "ReplaySession":
+        global _guard_installed
         if active_replay.get() is not None:
             raise ReplayDivergence("Replay sessions cannot be nested")
+        if not _guard_installed:
+            sys.addaudithook(_network_guard)
+            _guard_installed = True
         self.token = active_replay.set(self)
         return self
 
