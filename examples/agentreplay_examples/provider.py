@@ -13,7 +13,7 @@ def provider_completion(prompt: str) -> str:
     response = httpx.post(
         "https://api.openai.com/v1/responses",
         headers={"Authorization": f"Bearer {key}"},
-        json={"model": model, "input": prompt},
+        json={"model": model, "input": prompt, "store": False},
         timeout=30,
     )
     response.raise_for_status()
