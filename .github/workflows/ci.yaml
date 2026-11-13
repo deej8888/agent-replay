@@ -1,0 +1,77 @@
+name: CI
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python: ["3.11", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - run: pip install -e '.[dev]' -e ./packages/python-sdk -e ./examples -e ./apps/api
+      - run: ruff check .
+      - run: ruff format --check .
+      - run: mypy
+      - run: pytest -q
+      - run: agentreplay-demo --fail --output /tmp/failure.json
+      - run: agentreplay-demo --replay /tmp/failure.json
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e ./packages/python-sdk -e ./examples -e ./apps/api
+      - run: npm ci
+        working-directory: apps/web
+      - run: npm run lint && npm run typecheck && npm test && npm run build
+        working-directory: apps/web
+      - run: npx playwright install --with-deps chromium
+        working-directory: apps/web
+      - run: npm run test:e2e
+        working-directory: apps/web
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: browser-failures
+          path: apps/web/test-results
+  postgres:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: agentreplay
+          POSTGRES_PASSWORD: ci-only-password
+          POSTGRES_DB: agentreplay
+        ports: ["5432:5432"]
+        options: --health-cmd "pg_isready -U agentreplay" --health-interval 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e '.[dev]' -e ./packages/python-sdk -e ./examples -e ./apps/api
+      - run: pytest tests/test_postgres.py -q
+        env:
+          AGENTREPLAY_TEST_POSTGRES: postgresql+psycopg://agentreplay:ci-only-password@localhost:5432/agentreplay
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker compose up --build --wait
+      - run: curl --fail http://127.0.0.1:8000/health
+      - run: curl --fail -H 'Content-Type:application/json' -d '{}' http://127.0.0.1:3000/api/v1/demo
+      - run: docker compose down -v
+        if: always()
