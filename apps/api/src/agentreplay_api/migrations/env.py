@@ -1,11 +1,13 @@
-from agentreplay_api.database import Base, make_engine
 from alembic import context
+from sqlalchemy import Connection
+
+from agentreplay_api.database import Base, make_engine
 
 config = context.config
 connection = config.attributes.get("connection")
 
 
-def migrate(connection):
+def migrate(connection: Connection) -> None:
     context.configure(connection=connection, target_metadata=Base.metadata, compare_type=True)
     with context.begin_transaction():
         context.run_migrations()

@@ -8,6 +8,7 @@ from uuid import UUID
 from agentreplay import MemoryTransport, Redactor, ReplayDivergence, Run, Tracer
 from agentreplay_examples.agent import shopping_agent
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from sqlalchemy import Engine, func, or_, select
@@ -72,7 +73,8 @@ def create_app(engine: Engine | None = None, *, migrate: bool = True) -> FastAPI
             from alembic import command
             from alembic.config import Config
 
-            config = Config(str(Path(__file__).resolve().parents[2] / "alembic.ini"))
+            config = Config()
+            config.set_main_option("script_location", str(Path(__file__).parent / "migrations"))
             with engine.begin() as connection:
                 config.attributes["connection"] = connection
                 command.upgrade(config, "head")
@@ -80,6 +82,20 @@ def create_app(engine: Engine | None = None, *, migrate: bool = True) -> FastAPI
         engine.dispose()
 
     app = FastAPI(title="AgentReplay API", version="0.1.0", lifespan=lifespan)
+
+    @app.exception_handler(RequestValidationError)
+    async def validation_error(_: Request, exc: RequestValidationError) -> JSONResponse:
+        # Never reflect raw captured credentials in validation error responses.
+        return JSONResponse(
+            status_code=422,
+            content={
+                "detail": [
+                    {"loc": list(e["loc"]), "msg": Redactor().text(e["msg"]), "type": e["type"]}
+                    for e in exc.errors()
+                ]
+            },
+        )
+
     app.add_middleware(BodyLimit)
     app.add_middleware(
         CORSMiddleware,
@@ -122,12 +138,21 @@ def create_app(engine: Engine | None = None, *, migrate: bool = True) -> FastAPI
     def ingest(run: Run, db: DB) -> Run:
         # Sanitize on the server too; the SDK is not a trusted security boundary.
         redactor = Redactor(max_bytes=16_384)
+        run.name = redactor.text(run.name)
         run.input = redactor.capture(run.input)[0]
         run.output = redactor.capture(run.output)[0]
         run.metadata = dict(redactor.capture(run.metadata)[0])  # type: ignore[arg-type]
         if run.error:
             run.error.message = redactor.text(run.error.message)
+        if run.replay_report:
+            captured_report, _ = redactor.capture(run.replay_report)
+            run.replay_report = (
+                captured_report
+                if isinstance(captured_report, dict)
+                else {"detail": captured_report}
+            )
         for span in run.spans:
+            span.name = redactor.text(span.name)
             span.input, complete_in = redactor.capture(span.input)
             span.output, complete_out = redactor.capture(span.output)
             span.replayable = span.replayable and complete_in and complete_out

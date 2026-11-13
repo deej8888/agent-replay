@@ -12,7 +12,7 @@ branch_labels = None
 depends_on = None
 
 
-def upgrade():
+def upgrade() -> None:
     op.create_table(
         "runs",
         sa.Column("id", sa.String(36), primary_key=True),
@@ -43,6 +43,6 @@ def upgrade():
     op.create_index("ix_spans_run_id", "spans", ["run_id"])
 
 
-def downgrade():
+def downgrade() -> None:
     op.drop_table("spans")
     op.drop_table("runs")
