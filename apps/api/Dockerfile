@@ -4,8 +4,7 @@ WORKDIR /app
 COPY packages/python-sdk packages/python-sdk
 COPY examples examples
 COPY apps/api apps/api
-# Editable API install keeps the versioned migration files beside the package.
-RUN pip install ./packages/python-sdk ./examples -e ./apps/api \
+RUN pip install ./packages/python-sdk ./examples ./apps/api \
     && useradd --create-home agentreplay \
     && mkdir /data && chown agentreplay:agentreplay /data
 USER agentreplay
