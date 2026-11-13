@@ -69,7 +69,13 @@ def test_failure_preserves_application_exception():
 
 def test_redaction_and_payload_bounds():
     redactor = Redactor(sensitive_fields={"customer_name"}, max_bytes=200)
-    captured, complete = redactor.capture({"API_KEY": "private", "nested": {"customer_name": "Private Person"}, "note": "person@example.com"})
+    captured, complete = redactor.capture(
+        {
+            "API_KEY": "private",
+            "nested": {"customer_name": "Private Person"},
+            "note": "person@example.com",
+        }
+    )
     assert "private" not in str(captured).lower()
     assert "Private Person" not in str(captured)
     assert complete
@@ -84,6 +90,7 @@ def test_unknown_objects_do_not_invoke_repr():
     class Secret:
         def __repr__(self):
             raise AssertionError("repr must never be invoked")
+
     value, complete = Redactor().capture(Secret())
     assert value == "[UNSUPPORTED:Secret]" and not complete
 
@@ -92,9 +99,11 @@ def test_export_failure_cannot_break_agent():
     class BrokenTransport:
         def submit(self, run):
             raise RuntimeError("offline")
+
     @trace_agent
     def agent():
         return "still works"
+
     with Tracer(BrokenTransport()).use():
         assert agent() == "still works"
 
@@ -114,4 +123,5 @@ def test_tool_without_agent_is_transparent():
     @trace_tool
     def tool(x):
         return x + 1
+
     assert tool(1) == 2

@@ -12,7 +12,10 @@ def test_ingestion_tree_span_and_filters(client, recorded):
     span = recorded.spans[1]
     assert client.get(f"/v1/runs/{recorded.id}/spans/{span.id}").json()["name"] == "search_catalog"
     assert client.get(f"/v1/runs/{uuid4()}/spans/{span.id}").status_code == 404
-    assert client.get("/v1/runs?q=shopping&status=success&model=deterministic-fake-v1").json()["total"] == 1
+    assert (
+        client.get("/v1/runs?q=shopping&status=success&model=deterministic-fake-v1").json()["total"]
+        == 1
+    )
     assert client.get("/v1/runs?status=error").json()["total"] == 0
     assert client.get("/v1/runs?limit=1&offset=1").json()["items"] == []
     assert client.get("/v1/runs?limit=101").status_code == 422
@@ -25,7 +28,10 @@ def test_demo_reexecute_failure_and_divergence(client):
     assert replay.status_code == 201
     assert replay.json()["status"] == "error"
     assert replay.json()["replay_report"]["faithful"]
-    diverged = client.post(f"/v1/runs/{source['id']}/replays", json={"mode": "reexecution", "simulate_divergence": True}).json()
+    diverged = client.post(
+        f"/v1/runs/{source['id']}/replays",
+        json={"mode": "reexecution", "simulate_divergence": True},
+    ).json()
     assert not diverged["replay_report"]["faithful"]
     assert diverged["replay_report"]["missing_calls"]
     assert diverged["error"]["type"] == "ReplayDivergence"
@@ -78,7 +84,9 @@ def test_server_redacts_untrusted_ingestion(client, recorded):
 
 
 def test_body_size_limit(client):
-    response = client.post("/v1/runs", content=b" " * 2_097_153, headers={"Content-Type": "application/json"})
+    response = client.post(
+        "/v1/runs", content=b" " * 2_097_153, headers={"Content-Type": "application/json"}
+    )
     assert response.status_code == 413
 
 
@@ -87,3 +95,9 @@ def test_optional_api_key(client, monkeypatch):
     assert client.get("/v1/runs").status_code == 401
     assert client.get("/health").status_code == 200
     assert client.get("/v1/runs", headers={"X-API-Key": "test-key"}).status_code == 200
+
+
+def test_validation_errors_never_echo_raw_payloads(client):
+    response = client.post("/v1/runs", json={"api_key": "do-not-reflect-this"})
+    assert response.status_code == 422
+    assert "do-not-reflect-this" not in response.text
