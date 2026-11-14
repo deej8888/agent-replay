@@ -5,7 +5,8 @@ from contextlib import asynccontextmanager
 from typing import Annotated, Any, Literal
 from uuid import UUID
 
-from agentreplay import MemoryTransport, Redactor, ReplayDivergence, Run, Tracer
+from agentreplay import MemoryTransport, Redactor, ReplayDivergence, Run, Tracer, export_regression
+from agentreplay.redaction import sanitize_run
 from agentreplay_examples.agent import shopping_agent
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.exceptions import RequestValidationError
@@ -14,7 +15,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import Engine, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, Response
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from .database import RunRow, SpanRow, make_engine, make_sessions
@@ -137,28 +138,7 @@ def create_app(engine: Engine | None = None, *, migrate: bool = True) -> FastAPI
     @app.post("/v1/runs", status_code=201, response_model=Run)
     def ingest(run: Run, db: DB) -> Run:
         # Sanitize on the server too; the SDK is not a trusted security boundary.
-        redactor = Redactor(max_bytes=16_384)
-        run.name = redactor.text(run.name)
-        run.input = redactor.capture(run.input)[0]
-        run.output = redactor.capture(run.output)[0]
-        run.metadata = dict(redactor.capture(run.metadata)[0])  # type: ignore[arg-type]
-        if run.error:
-            run.error.message = redactor.text(run.error.message)
-        if run.replay_report:
-            captured_report, _ = redactor.capture(run.replay_report)
-            run.replay_report = (
-                captured_report
-                if isinstance(captured_report, dict)
-                else {"detail": captured_report}
-            )
-        for span in run.spans:
-            span.name = redactor.text(span.name)
-            span.input, complete_in = redactor.capture(span.input)
-            span.output, complete_out = redactor.capture(span.output)
-            span.replayable = span.replayable and complete_in and complete_out
-            span.metadata = dict(redactor.capture(span.metadata)[0])  # type: ignore[arg-type]
-            if span.error:
-                span.error.message = redactor.text(span.error.message)
+        run = sanitize_run(run)
         if len(run.model_dump_json().encode()) > 2_097_152:
             raise HTTPException(413, "Sanitized trace exceeds 2 MiB")
         try:
@@ -207,6 +187,31 @@ def create_app(engine: Engine | None = None, *, migrate: bool = True) -> FastAPI
     @app.get("/v1/runs/{run_id}", response_model=Run)
     def detail(run_id: UUID, db: DB) -> Run:
         return get_run(db, run_id)
+
+    @app.get("/v1/runs/{run_id}/regression", response_class=Response)
+    def regression_bundle(
+        run_id: UUID, db: DB, entrypoint: str | None = Query(default=None, max_length=500)
+    ) -> Response:
+        source = get_run(db, run_id)
+        # Legacy demo recordings predate automatic entrypoint capture.
+        if (
+            not entrypoint
+            and not source.metadata.get("entrypoint")
+            and source.metadata.get("replay_target") == "shopping-demo"
+        ):
+            entrypoint = "agentreplay_examples.agent:shopping_agent"
+        try:
+            bundle = export_regression(source, entrypoint)
+        except (ValueError, ReplayDivergence) as exc:
+            raise HTTPException(422, str(exc)) from exc
+        return Response(
+            content=bundle,
+            media_type="application/zip",
+            headers={
+                "Content-Disposition": f'attachment; filename="agentreplay-regression-{run_id.hex[:12]}.zip"',
+                "Cache-Control": "no-store",
+            },
+        )
 
     @app.get("/v1/runs/{run_id}/spans/{span_id}")
     def span_detail(run_id: UUID, span_id: UUID, db: DB) -> dict[str, Any]:

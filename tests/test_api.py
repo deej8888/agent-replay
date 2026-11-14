@@ -1,4 +1,6 @@
+from io import BytesIO
 from uuid import uuid4
+from zipfile import ZipFile
 
 from agentreplay import Run
 
@@ -101,3 +103,42 @@ def test_validation_errors_never_echo_raw_payloads(client):
     response = client.post("/v1/runs", json={"api_key": "do-not-reflect-this"})
     assert response.status_code == 422
     assert "do-not-reflect-this" not in response.text
+
+
+def test_regression_download_is_valid_zip_and_does_not_execute_target(client):
+    source = client.post("/v1/demo", json={"fail": True}).json()
+    response = client.get(
+        f"/v1/runs/{source['id']}/regression", params={"entrypoint": "not_installed_module:agent"}
+    )
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/zip"
+    assert "attachment" in response.headers["content-disposition"]
+    with ZipFile(BytesIO(response.content)) as bundle:
+        assert len(bundle.namelist()) == 3
+        fixture = Run.model_validate_json(
+            bundle.read(next(n for n in bundle.namelist() if n.endswith(".json")))
+        )
+        assert fixture.status == "error"
+    assert (
+        client.get(
+            f"/v1/runs/{source['id']}/regression", params={"entrypoint": "invalid-target"}
+        ).status_code
+        == 422
+    )
+    assert client.get(f"/v1/runs/{uuid4()}/regression").status_code == 404
+
+
+def test_legacy_demo_can_export_and_incomplete_trace_is_rejected(client, recorded):
+    recorded.metadata.pop("entrypoint", None)
+    client.post("/v1/runs", json=recorded.model_dump(mode="json"))
+    assert client.get(f"/v1/runs/{recorded.id}/regression").status_code == 200
+    recorded.id = uuid4()
+    for span in recorded.spans:
+        # A second source must not reuse globally unique span IDs.
+        span.id = uuid4()
+    root = recorded.spans[0]
+    for span in recorded.spans[1:]:
+        span.parent_id = root.id
+    recorded.spans[1].replayable = False
+    client.post("/v1/runs", json=recorded.model_dump(mode="json"))
+    assert client.get(f"/v1/runs/{recorded.id}/regression").status_code == 422
