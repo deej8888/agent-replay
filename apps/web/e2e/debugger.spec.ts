@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { readFile } from "node:fs/promises";
 
 test("records, inspects, and re-executes a failed run offline", async ({
   page,
@@ -74,4 +75,62 @@ test("keeps the mobile layout within the viewport", async ({ page }) => {
       () => document.documentElement.scrollWidth <= window.innerWidth,
     ),
   ).toBeTruthy();
+});
+
+test("downloads a complete offline pytest bundle through the debugger proxy", async ({
+  page,
+  request,
+}) => {
+  const source = await (
+    await request.post("/api/v1/demo", { data: { fail: true } })
+  ).json();
+  await page.goto(`/?run=${source.id}`);
+  await page.getByRole("button", { name: "Export pytest" }).click();
+  await expect(page.getByLabel("Python entrypoint")).toHaveValue(
+    "agentreplay_examples.agent:shopping_agent",
+  );
+  await expect(
+    page.getByText("It passes when that failure is reproduced.", {
+      exact: false,
+    }),
+  ).toBeVisible();
+  const downloadEvent = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Download test bundle" }).click();
+  const download = await downloadEvent;
+  expect(download.suggestedFilename()).toBe(
+    `agentreplay-regression-${source.id.replaceAll("-", "").slice(0, 12)}.zip`,
+  );
+  const data = await readFile((await download.path())!);
+  expect(data.subarray(0, 4).toString("hex")).toBe("504b0304");
+  expect(data.includes(Buffer.from("README.md"))).toBeTruthy();
+  const response = await request.get(
+    `/api/v1/runs/${source.id}/regression?entrypoint=agentreplay_examples.agent%3Ashopping_agent`,
+  );
+  expect(response.headers()["content-type"]).toBe("application/zip");
+  expect(data.equals(await response.body())).toBeTruthy();
+  await expect(page.getByRole("status")).toContainText(
+    "Test bundle downloaded",
+  );
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
+  ).toBeTruthy();
+});
+
+test("shows an actionable error for an invalid regression entrypoint", async ({
+  page,
+  request,
+}) => {
+  const source = await (
+    await request.post("/api/v1/demo", { data: {} })
+  ).json();
+  await page.goto(`/?run=${source.id}`);
+  await page.getByRole("button", { name: "Export pytest" }).click();
+  await page.getByLabel("Python entrypoint").fill("invalid-entrypoint");
+  await page.getByRole("button", { name: "Download test bundle" }).click();
+  await expect(
+    page.getByRole("region", { name: "Regression test" }).getByRole("alert"),
+  ).toContainText("Use a Python entrypoint");
 });

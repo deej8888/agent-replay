@@ -849,6 +849,53 @@ footer > span:first-child {
   display: flex;
   gap: 9px;
 }
+
+.regression-export {
+  margin-top: 22px;
+}
+.regression-export-body {
+  padding: 20px;
+}
+.regression-export-body p {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.7;
+  margin-bottom: 14px;
+}
+.regression-export-body .expected-error {
+  color: #c9a277;
+}
+.regression-export-body label {
+  display: block;
+  font-size: 11px;
+  margin-bottom: 8px;
+}
+.regression-export-fields {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.regression-export-fields input {
+  min-width: 0;
+  flex: 1;
+  padding: 10px 12px;
+  font-family: Consolas, monospace;
+  font-size: 12px;
+}
+.regression-export-body p:last-child {
+  margin-bottom: 0;
+}
+.regression-export-body p.red {
+  color: var(--red);
+}
+.regression-export-body p.teal {
+  color: var(--teal);
+}
+@media (max-width: 650px) {
+  .regression-export-fields {
+    flex-direction: column;
+  }
+}
 .detail-metrics {
   display: flex;
   align-items: center;

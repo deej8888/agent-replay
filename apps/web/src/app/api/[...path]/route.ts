@@ -56,12 +56,16 @@ async function proxy(
         cache: "no-store",
       },
     );
-    return new Response(await response.text(), {
+    const headers = new Headers({
+      "Content-Type":
+        response.headers.get("Content-Type") || "application/json",
+      "Cache-Control": "no-store",
+    });
+    const disposition = response.headers.get("Content-Disposition");
+    if (disposition) headers.set("Content-Disposition", disposition);
+    return new Response(response.body, {
       status: response.status,
-      headers: {
-        "Content-Type": "application/json",
-        "Cache-Control": "no-store",
-      },
+      headers,
     });
   } catch {
     return Response.json(

@@ -24,6 +24,7 @@ import {
 } from "@/lib/trace";
 import { JsonInspector } from "./json-inspector";
 import { Status, Timestamp } from "./ui";
+import { RegressionExport } from "./regression-export";
 export function RunDetail({
   run,
   busy,
@@ -262,6 +263,7 @@ export function RunDetail({
           </div>
         </div>
       </section>
+      <RegressionExport key={run.id} run={run} />
       {canExecute && (
         <div className="divergence-demo">
           <span>
