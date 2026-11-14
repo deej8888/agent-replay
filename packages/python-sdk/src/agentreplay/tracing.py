@@ -158,6 +158,14 @@ def _decorate(
     def decorate(fn: Callable[P, R]) -> Callable[P, R]:
         signature = inspect.signature(fn)
         span_name = name or fn.__name__
+        span_metadata = dict(metadata or {})
+        if (
+            kind == "agent"
+            and fn.__module__ != "__main__"
+            and not {"self", "cls"}.intersection(signature.parameters)
+            and all(part.isidentifier() for part in f"{fn.__module__}.{fn.__qualname__}".split("."))
+        ):
+            span_metadata.setdefault("entrypoint", f"{fn.__module__}:{fn.__qualname__}")
 
         def prepare(args: tuple[Any, ...], kwargs: dict[str, Any]) -> dict[str, Any]:
             bound = signature.bind(*args, **kwargs)
@@ -184,7 +192,7 @@ def _decorate(
                 boundary_token = boundary_context.set((*boundary_context.get(), uuid4()))
             try:
                 with tracer.span(
-                    span_name, kind=kind, inputs=inputs, metadata=metadata, _mockable=boundary
+                    span_name, kind=kind, inputs=inputs, metadata=span_metadata, _mockable=boundary
                 ) as state:
                     yield state, True
             finally:

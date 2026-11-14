@@ -11,6 +11,8 @@ from typing import Any
 
 from pydantic import JsonValue
 
+from .models import Run
+
 SENSITIVE = re.compile(
     r"password|passwd|secret|token|authorization|api.?key|cookie|credential|ssn|email|phone|address",
     re.I,
@@ -86,3 +88,33 @@ class Redactor:
             # Hash the sanitized representation, never retain a raw-value fingerprint.
             return {"_truncated": True, "sha256": hashlib.sha256(encoded).hexdigest()}, False
         return captured, complete
+
+
+def sanitize_run(run: Run, redactor: Redactor | None = None) -> Run:
+    """Sanitize a complete trace without mutating the caller's recording."""
+    redactor = redactor or Redactor()
+    clean = run.model_copy(deep=True)
+    clean.name = redactor.text(clean.name)
+    clean.input = redactor.capture(clean.input)[0]
+    clean.output = redactor.capture(clean.output)[0]
+    metadata, _ = redactor.capture(clean.metadata)
+    clean.metadata = metadata if isinstance(metadata, dict) else {"detail": metadata}
+    if run.metadata.get("concurrent"):
+        clean.metadata["concurrent"] = True
+    if clean.error:
+        clean.error.message = redactor.text(clean.error.message)
+    if clean.replay_report:
+        report, _ = redactor.capture(clean.replay_report)
+        clean.replay_report = report if isinstance(report, dict) else {"detail": report}
+    for span in clean.spans:
+        span.name = redactor.text(span.name)
+        span.input, complete_input = redactor.capture(span.input)
+        span.output, complete_output = redactor.capture(span.output)
+        span.replayable = span.replayable and complete_input and complete_output
+        span_metadata, _ = redactor.capture(span.metadata)
+        span.metadata = (
+            span_metadata if isinstance(span_metadata, dict) else {"detail": span_metadata}
+        )
+        if span.error:
+            span.error.message = redactor.text(span.error.message)
+    return clean
