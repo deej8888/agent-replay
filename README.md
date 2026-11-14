@@ -47,6 +47,22 @@ agentreplay-demo --replay failure.json
 
 The last command re-executes the shopping agent, substitutes the two recorded tool results, and raises the same inventory validation failure. Its report shows `offline: true`, `matched_calls: 2`, and `faithful: true`. It works with the API stopped. Recording files contain sanitized trace data; review them before sharing.
 
+## Export a regression test
+
+Open an execution and select **Export pytest** in the **Regression test** panel. Confirm the importable Python entrypoint, then select **Download test bundle**. The ZIP contains a sanitized JSON recording, a pytest test, and setup instructions.
+
+The generated test checks tool/model call order and arguments, agent input, final output, status, and exception. A faithfully reproduced recorded failure passes. Changed behavior fails the test, so intentionally changed behavior needs a new recording as its baseline.
+
+You can export from a recording file too:
+
+```bash
+python -m agentreplay export-test failure.json --entrypoint agentreplay_examples.agent:shopping_agent --output .artifacts/regression.zip
+python -m zipfile -e .artifacts/regression.zip .artifacts/regression
+python -m pytest .artifacts/regression -q
+```
+
+Install the agent application and the current SDK in the test environment. Newly recorded module-level agents include their entrypoint automatically. For older recordings or instance methods, supply an importable adapter that accepts the recorded arguments. Both synchronous and async agents work with the generated test. See [the regression testing guide](docs/regression-tests.md) for custom assertions and redaction settings.
+
 ## Instrument your agent
 
 ```python
@@ -135,7 +151,7 @@ Start with [CONTRIBUTING.md](CONTRIBUTING.md), [architecture](docs/architecture.
 
 ## MVP scope and next steps
 
-The working MVP includes the SDK, buffered capture, SQLite/PostgreSQL storage, migrations, dashboard, filtering and pagination, nested timeline, JSON inspector, behavioral comparison, trace playback, strict offline re-execution, failure reproduction, and a separate optional provider adapter.
+The working MVP includes the SDK, buffered capture, SQLite/PostgreSQL storage, migrations, dashboard, filtering and pagination, nested timeline, JSON inspector, behavioral comparison, trace playback, strict offline re-execution, failure reproduction, portable pytest regression export, and a separate optional provider adapter.
 
 Deferred: multi-user authentication and tenancy, streaming live spans, durable export queues/retries, distributed tracing, framework-specific auto-instrumentation, token/cost analytics, parallel-call replay, time/randomness virtualization, arbitrary server-side agent execution, and application sandboxing. These require separate designs; the UI does not present them as available.
 

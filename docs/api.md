@@ -8,6 +8,7 @@ Base URL: `http://127.0.0.1:8000`. OpenAPI UI: `/docs`. Interactive docs and all
 | POST | `/v1/runs` | Validate, sanitize, and atomically ingest one complete run and its spans (201) |
 | GET | `/v1/runs` | Paginated summaries, newest original start time first |
 | GET | `/v1/runs/{run_id}` | Full run with flat parent-linked spans in start order |
+| GET | `/v1/runs/{run_id}/regression?entrypoint=my_app.agent:run_agent` | Download a ZIP containing a sanitized fixture and runnable pytest test |
 | GET | `/v1/runs/{run_id}/spans/{span_id}` | Span input, output, error and metadata |
 | POST | `/v1/demo` | Record a no-key demo; body `{ "request": "Find a keyboard", "fail": false }` |
 | POST | `/v1/runs/{run_id}/replays` | Create playback or demo re-execution |
@@ -26,3 +27,5 @@ Replay requires a `mode`:
 Run/span schemas are defined in `packages/python-sdk/src/agentreplay/models.py`. Input/output values are JSON. Error details contain a type and sanitized message. Root agents have no parent; all other spans must reference an earlier sequence in the same run. Timestamps require explicit timezones and must be contained within their parents/run. The server sorts valid spans by sequence.
 
 Errors use standard HTTP status codes: 401 for an invalid/missing configured key; 404 for missing records; 409 for duplicate run/span IDs; 413 for bodies over 2 MiB; 422 for validation and non-replayable sources. An executed demo divergence is a valid newly stored failed run (201), with its mismatch in the replay report. Validation responses omit raw input payloads.
+
+Regression export returns `application/zip` with a download filename in `Content-Disposition`. It does not import the requested entrypoint. The optional `entrypoint` query parameter defaults to captured metadata or the legacy shopping-demo target. Invalid entrypoints, incomplete/concurrent sources, diverged replay results and unsupported agent inputs return 422. The Next.js proxy preserves binary responses and download headers.

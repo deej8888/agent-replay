@@ -20,6 +20,9 @@ jobs:
       - run: pytest -q
       - run: agentreplay-demo --fail --output /tmp/failure.json
       - run: agentreplay-demo --replay /tmp/failure.json
+      - run: agentreplay export-test /tmp/failure.json --entrypoint agentreplay_examples.agent:shopping_agent --output /tmp/regression.zip
+      - run: python -m zipfile -e /tmp/regression.zip /tmp/agentreplay-regression
+      - run: pytest /tmp/agentreplay-regression -q
   web:
     runs-on: ubuntu-latest
     steps:

@@ -58,3 +58,9 @@ Set explicit names for decorated bound methods: receiver instances are excluded 
 `BufferedHTTPTransport(url=..., api_key=..., capacity=128)` submits completed runs from a background thread. A full queue drops new runs. HTTP requests have a three-second timeout and do not inherit proxy settings (`trust_env=False`). There are no retries or disk spool. `failed` counts unsuccessful deliveries; `dropped` counts full-queue/closed-transport drops. Calling `close()` drains queued attempts, so shutdown can take time when the API is unavailable. Process termination without closing may lose buffered traces.
 
 For tests and local files, `MemoryTransport` keeps complete models in `.runs`. Create a fresh instance per test or clear it for long-lived applications. An implicit tracer without an explicit `Tracer.use()` has a null exporter and retains no runs.
+
+## Regression test export
+
+`export_regression(run, entrypoint=None, redactor=None)` returns a ZIP with a pytest test, recording JSON, and instructions. Importable `@trace_agent` functions add an `entrypoint` metadata field automatically. You can supply or override the target when exporting. The exporter generates files without importing the target.
+
+`assert_replay(run, callable_or_entrypoint, redactor=None)` checks the reproduced behavior and returns the actual run. Use `await assert_replay_async(...)` from an active async context. The CLI command `python -m agentreplay export-test recording.json --entrypoint my_app:agent --output regression.zip` provides the same export. See [the regression testing guide](regression-tests.md).
